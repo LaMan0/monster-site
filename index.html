@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster Energy — Libère la bête | Site concept</title>
+<meta name="description" content="Monster Energy — Libère la bête. Découvre les 6 parfums de la gamme, le blend énergisant et tout ce qu'il faut savoir. Site concept non officiel.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 80'%3E%3Cg fill='%233dff1c'%3E%3Cpath d='M10 4 C14 22 12 52 8 72 C7 76 4 74 4 68 C5 46 3 18 8 5 Z'/%3E%3Cpath d='M27 2 C32 24 30 58 25 76 C24 80 21 78 21 72 C22 44 20 14 25 3 Z'/%3E%3Cpath d='M44 5 C49 24 47 50 43 68 C42 72 39 70 39 64 C40 42 38 16 42 6 Z'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/script.js" defer></script>
+<script type="module" src="js/cans3d.js"></script>
+</head>
+<body data-theme="base">
+
+<div class="bgstack">
+  <div id="bg-base" class="active"></div>
+  <div id="bg-original"></div>
+  <div id="bg-ultra"></div>
+  <div id="bg-mango"></div>
+  <div id="bg-pipeline"></div>
+  <div id="bg-assault"></div>
+  <div id="bg-pacific"></div>
+</div>
+<div class="grain"></div>
+<div class="progress" id="progress"></div>
+<div class="cursor" id="cursor"><div class="ring"></div></div>
+
+<!-- ================= HEADER ================= -->
+<header id="header">
+  <a class="logo" href="#top" aria-label="Monster Energy">
+    <svg viewBox="0 0 60 80" fill="none" aria-hidden="true">
+      <g stroke="#050505" stroke-width="3" stroke-linejoin="round">
+        <path d="M10 4 C14 22 12 52 8 72 C7 76 4 74 4 68 C5 46 3 18 8 5 Z" fill="#3dff1c"/>
+        <path d="M27 2 C32 24 30 58 25 76 C24 80 21 78 21 72 C22 44 20 14 25 3 Z" fill="#3dff1c"/>
+        <path d="M44 5 C49 24 47 50 43 68 C42 72 39 70 39 64 C40 42 38 16 42 6 Z" fill="#3dff1c"/>
+      </g>
+    </svg>
+    <span>MONSTER<em>·FR</em></span>
+  </a>
+  <nav>
+    <a href="#saveurs">Saveurs</a>
+    <a href="#blend">Le Blend</a>
+    <a href="#comparatif">Chiffres</a>
+    <a href="#faq">FAQ</a>
+    <a href="#contact">Nous rejoindre</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <canvas id="embers"></canvas>
+  <div class="hero-kicker reveal">Boisson énergisante · Depuis 2002</div>
+  <h1>
+    <span class="line1 reveal">LIBÈRE</span>
+    <span class="line2 reveal">LA BÊTE</span>
+  </h1>
+
+  <div class="hero-glare" aria-hidden="true"></div>
+  <div class="hero-can3d can3d" id="heroCan" data-flavor="original" data-tilt="mouse">
+    <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Energy Original — glisser pour la faire tourner"></div>
+    <img class="can-img can-img-fb" src="images/can-original.webp" alt="Canette Monster Energy Original noire à la griffe verte" fetchpriority="high">
+    <div class="can-shadow" aria-hidden="true"></div>
+    <div class="can-hint" aria-hidden="true">⟲ Glisse pour la faire tourner</div>
+  </div>
+
+  <p class="hero-sub reveal">Caféine, taurine, ginseng et vitamines B. <b>Six parfums, une seule bête.</b> Découvre la gamme qui règne sur les circuits, les scènes et les setups gaming.</p>
+  <div class="hero-ctas reveal">
+    <a class="btn btn-solid" href="#saveurs">Découvrir les saveurs</a>
+    <a class="btn btn-ghost" href="#blend">Le blend</a>
+  </div>
+  <div class="scroll-hint">Scroller pour découvrir</div>
+</section>
+
+<!-- ================= MARQUEE ================= -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-inner">
+    <span>CAFÉINE <i>//</i> TAURINE <i>//</i> GINSENG <i>//</i> VITAMINES B <i>//</i> ORIGINAL <i>//</i> ULTRA <i>//</i> MANGO LOCO <i>//</i> PIPELINE PUNCH <i>//</i> ASSAULT <i>//</i> PACIFIC PUNCH <i>//</i> UNLEASH THE BEAST <i>//</i>&nbsp;</span>
+    <span>CAFÉINE <i>//</i> TAURINE <i>//</i> GINSENG <i>//</i> VITAMINES B <i>//</i> ORIGINAL <i>//</i> ULTRA <i>//</i> MANGO LOCO <i>//</i> PIPELINE PUNCH <i>//</i> ASSAULT <i>//</i> PACIFIC PUNCH <i>//</i> UNLEASH THE BEAST <i>//</i>&nbsp;</span>
+  </div>
+</div>
+
+<!-- ================= PARFUMS ================= -->
+<div class="flavors-title" id="saveurs">
+  <h2>Choisis <em>ta bête</em></h2>
+  <p>Six cannettes, six personnalités. Chaque saveur a son caractère — scroll pour toutes les rencontrer.</p>
+</div>
+
+<section class="flavor" id="f-original" data-theme="original" style="--fa1:#3dff1c">
+  <div class="f-glare"></div>
+  <div class="giant">ORIGINAL</div>
+  <div class="flavor-grid">
+    <div class="f-info reveal">
+      <p class="f-meta"><b>01</b> / 06 — L'iconique</p>
+      <span class="f-tag">160 mg caféine · 500 ml</span>
+      <h3>Monster Original</h3>
+      <p class="f-desc">Celle qui a tout lancé. Un goût complexe, doux et corsé à la fois, avec la puissance du blend original. La canette noire aux trois griffes vertes — la plus reconnaissable au monde.</p>
+      <div class="specs">
+        <div class="spec"><b>46</b><span>kcal /100 ml</span></div>
+        <div class="spec"><b>11 g</b><span>sucres /100 ml</span></div>
+        <div class="spec"><b>32</b><span>mg caféine /100 ml</span></div>
+      </div>
+    </div>
+    <div class="f-canwrap">
+      <div class="f-can3d can3d" data-flavor="original">
+        <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Original — glisser pour la faire tourner"></div>
+        <img class="can-img can-img-fb" src="images/can-original.webp" alt="Canette Monster Original" loading="lazy" decoding="async">
+        <div class="can-shadow" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<section class="flavor alt" id="f-ultra" data-theme="ultra" style="--fa1:#dff3ff">
+  <div class="f-glare"></div>
+  <div class="giant">ULTRA</div>
+  <div class="flavor-grid">
+    <div class="f-info reveal">
+      <p class="f-meta"><b>02</b> / 06 — Zéro sucre</p>
+      <span class="f-tag" style="color:#083026;background:#dff3ff">0 sucre · 0 regret</span>
+      <h3>Monster Ultra</h3>
+      <p class="f-desc">Le monstre en tenue blanche. La pleine puissance du blend sans un gramme de sucre : une saveur légère et pétillante, à la limite du soda d'été. Ultra White, celle des accros au zéro sucre.</p>
+      <div class="specs">
+        <div class="spec"><b>3</b><span>kcal /100 ml</span></div>
+        <div class="spec"><b>0 g</b><span>sucres /100 ml</span></div>
+        <div class="spec"><b>30</b><span>mg caféine /100 ml</span></div>
+      </div>
+    </div>
+    <div class="f-canwrap">
+      <div class="f-can3d can3d" data-flavor="ultra">
+        <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Ultra blanche — glisser pour la faire tourner"></div>
+        <img class="can-img can-img-fb" src="images/can-ultra.webp" alt="Canette Monster Ultra blanche zéro sucre" loading="lazy" decoding="async">
+        <div class="can-shadow" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<section class="flavor" id="f-mango" data-theme="mango" style="--fa1:#ffb020">
+  <div class="f-glare"></div>
+  <div class="giant">MANGO LOCO</div>
+  <div class="flavor-grid">
+    <div class="f-info reveal">
+      <p class="f-meta"><b>03</b> / 06 — Juice Monster</p>
+      <span class="f-tag" style="color:#331001;background:#ffb020">16 % jus de fruits</span>
+      <h3>Mango Loco</h3>
+      <p class="f-desc">Un carnaval dans une canette. Du vrai jus de mangue mélangé au blend Monster pour une vague tropicale explosive. Inspirée du Día de Muertos, impossible de louper les festivités.</p>
+      <div class="specs">
+        <div class="spec"><b>45</b><span>kcal /100 ml</span></div>
+        <div class="spec"><b>11 g</b><span>sucres /100 ml</span></div>
+        <div class="spec"><b>32</b><span>mg caféine /100 ml</span></div>
+      </div>
+    </div>
+    <div class="f-canwrap">
+      <div class="f-can3d can3d" data-flavor="mango">
+        <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Mango Loco bleue — glisser pour la faire tourner"></div>
+        <img class="can-img can-img-fb" src="images/can-mango.webp" alt="Canette Monster Mango Loco bleue Dia de Muertos" loading="lazy" decoding="async">
+        <div class="can-shadow" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<section class="flavor alt" id="f-pipeline" data-theme="pipeline" style="--fa1:#ff5e7a">
+  <div class="f-glare"></div>
+  <div class="giant">PIPELINE PUNCH</div>
+  <div class="flavor-grid">
+    <div class="f-info reveal">
+      <p class="f-meta"><b>04</b> / 06 — Juice Monster</p>
+      <span class="f-tag" style="color:#33060f;background:#ff5e7a">Fruit de la passion</span>
+      <h3>Pipeline Punch</h3>
+      <p class="f-desc">Fruit de la passion, orange et goyave : une gifle tropicale inspirée du spot de surf légendaire Banzai Pipeline d'Hawaï. La vague qui te pousse au-delà de tes limites.</p>
+      <div class="specs">
+        <div class="spec"><b>50</b><span>kcal /100 ml</span></div>
+        <div class="spec"><b>12 g</b><span>sucres /100 ml</span></div>
+        <div class="spec"><b>32</b><span>mg caféine /100 ml</span></div>
+      </div>
+    </div>
+    <div class="f-canwrap">
+      <div class="f-can3d can3d" data-flavor="pipeline">
+        <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Pipeline Punch rose — glisser pour la faire tourner"></div>
+        <img class="can-img can-img-fb" src="images/can-pipeline.webp" alt="Canette Monster Pipeline Punch rose" loading="lazy" decoding="async">
+        <div class="can-shadow" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<section class="flavor" id="f-assault" data-theme="assault" style="--fa1:#ff4b2e">
+  <div class="f-glare"></div>
+  <div class="giant">ASSAULT</div>
+  <div class="flavor-grid">
+    <div class="f-info reveal">
+      <p class="f-meta"><b>05</b> / 06 — L'agressive</p>
+      <span class="f-tag" style="color:#330a06;background:#ff4b2e">Camo édition</span>
+      <h3>Monster Assault</h3>
+      <p class="f-desc">Version camouflage, attitude maximum. Un goût punchy et intense pour les missions qui ne dorment jamais. La canette des gamers de nuit et des soldats du grind.</p>
+      <div class="specs">
+        <div class="spec"><b>49</b><span>kcal /100 ml</span></div>
+        <div class="spec"><b>12 g</b><span>sucres /100 ml</span></div>
+        <div class="spec"><b>32</b><span>mg caféine /100 ml</span></div>
+      </div>
+    </div>
+    <div class="f-canwrap">
+      <div class="f-can3d can3d" data-flavor="assault">
+        <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Assault camouflage — glisser pour la faire tourner"></div>
+        <img class="can-img can-img-fb" src="images/can-assault.webp" alt="Canette Monster Assault camouflage griffe rouge" loading="lazy" decoding="async">
+        <div class="can-shadow" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<section class="flavor alt" id="f-pacific" data-theme="pacific" style="--fa1:#e03a3a">
+  <div class="f-glare"></div>
+  <div class="giant">PACIFIC PUNCH</div>
+  <div class="flavor-grid">
+    <div class="f-info reveal">
+      <p class="f-meta"><b>06</b> / 06 — La mystique</p>
+      <span class="f-tag" style="color:#300808;background:#e03a3a">Baies · Framboise · Cerise</span>
+      <h3>Pacific Punch</h3>
+      <p class="f-desc">Un océan de fruits rouges : framboise, pomme, cerise et fruits de la passion réunis dans une vague électrisante. Le punch qui vient du large et frappe fort.</p>
+      <div class="specs">
+        <div class="spec"><b>47</b><span>kcal /100 ml</span></div>
+        <div class="spec"><b>12 g</b><span>sucres /100 ml</span></div>
+        <div class="spec"><b>32</b><span>mg caféine /100 ml</span></div>
+      </div>
+    </div>
+    <div class="f-canwrap">
+      <div class="f-can3d can3d" data-flavor="pacific">
+        <div class="can3d-stage" role="img" aria-label="Canette 3D Monster Pacific Punch sable — glisser pour la faire tourner"></div>
+        <img class="can-img can-img-fb" src="images/can-pacific.webp" alt="Canette Monster Pacific Punch sable griffe rouge" loading="lazy" decoding="async">
+        <div class="can-shadow" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div></div>
+  </div>
+</section>
+
+<!-- ================= BLEND ================= -->
+<section class="blend" id="blend">
+  <h2 class="reveal">Le <em>blend énergisant</em></h2>
+  <p class="reveal">La formule maison : une association de caféine, taurine, glucuronolactone, inositol, extrait de ginseng et vitamines B. Voilà ce qu'il y a, en moyenne, dans une canette de 500 ml d'une Monster classique.</p>
+  <div class="stats">
+    <div class="stat reveal">
+      <div class="num"><span data-count="160">0</span><small> mg</small></div>
+      <h4>Caféine</h4>
+      <p>Le carburant principal. Environ deux expressos par canette de 500 ml, pour un coup de fouet immédiat.</p>
+    </div>
+    <div class="stat reveal">
+      <div class="num"><span data-count="1000">0</span><small> mg</small></div>
+      <h4>Taurine</h4>
+      <p>Acide aminé emblématique des boissons énergisantes. Celle de Monster est de synthèse, d'origine non animale.</p>
+    </div>
+    <div class="stat reveal">
+      <div class="num"><span data-count="400">0</span><small> mg</small></div>
+      <h4>Ginseng</h4>
+      <p>Extrait de ginseng — la racine utilisée comme tonique en Asie depuis des siècles.</p>
+    </div>
+    <div class="stat reveal">
+      <div class="num"><span data-count="4">0</span><small> vit.</small></div>
+      <h4>Vitamines B</h4>
+      <p>Vitamines B2, B3, B6 et B12 qui contribuent à un métabolisme énergétique normal et réduisent la fatigue.</p>
+    </div>
+  </div>
+  <div class="warn reveal">
+    <b>À consommer avec modération :</b> teneur élevée en caféine (32 mg/100 ml). Déconseillée aux enfants et aux femmes enceintes ou allaitantes. Une canette de 500 ml contient 160 mg de caféine — la limite quotidienne recommandée pour un adulte est de 400 mg. Les boissons énergisantes ne sont pas destinées à la réhydratation pendant le sport.
+  </div>
+</section>
+
+<!-- ================= COMPARATIF ================= -->
+<section class="compare" id="comparatif">
+  <h2 class="reveal">Les chiffres par parfum</h2>
+  <p class="sub reveal">Valeurs moyennes pour 100 ml — indicatives, chaque pays peut varier légèrement.</p>
+  <div class="tablewrap reveal">
+    <table>
+      <thead>
+        <tr><th>Parfum</th><th>Énergie</th><th>Sucres</th><th>Caféine</th><th>Particularité</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="name"><i style="color:#3dff1c;background:#3dff1c"></i>Original</td>
+          <td>46 kcal</td><td>11 g</td><td class="hl">32 mg</td><td>La recette culte</td>
+        </tr>
+        <tr>
+          <td class="name"><i style="color:#dff3ff;background:#dff3ff"></i>Ultra</td>
+          <td class="hl">3 kcal</td><td class="hl">0 g</td><td>30 mg</td><td>Zéro sucre</td>
+        </tr>
+        <tr>
+          <td class="name"><i style="color:#ffb020;background:#ffb020"></i>Mango Loco</td>
+          <td>45 kcal</td><td>11 g</td><td>32 mg</td><td>16 % jus de fruits</td>
+        </tr>
+        <tr>
+          <td class="name"><i style="color:#ff5e7a;background:#ff5e7a"></i>Pipeline Punch</td>
+          <td>50 kcal</td><td>12 g</td><td>32 mg</td><td>Fruits de la passion</td>
+        </tr>
+        <tr>
+          <td class="name"><i style="color:#ff4b2e;background:#ff4b2e"></i>Assault</td>
+          <td>49 kcal</td><td>12 g</td><td>32 mg</td><td>Édition camouflage</td>
+        </tr>
+        <tr>
+          <td class="name"><i style="color:#e03a3a;background:#e03a3a"></i>Pacific Punch</td>
+          <td>47 kcal</td><td>12 g</td><td>32 mg</td><td>Mélange baies rouges</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section class="faq" id="faq">
+  <h2 class="reveal">Foire aux <em>questions</em></h2>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">Combien de caféine contient une canette de Monster ?<span class="cross"></span></button>
+    <div class="faq-a"><p>Les Monster classiques contiennent 32 mg de caféine pour 100 ml, soit 160 mg pour une grande canette de 500 ml (80 mg pour une 250 ml). C'est l'équivalent d'environ deux expressos. À garder en tête : la limite quotidienne recommandée pour un adulte est de 400 mg, toutes sources de caféine confondues.</p></div>
+  </div>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">C'est quoi exactement le « blend énergisant » de Monster ?<span class="cross"></span></button>
+    <div class="faq-a"><p>Le blend Monster associe caféine, taurine, glucuronolactone, inositol, extrait de ginseng et vitamines du groupe B (B2, B3, B6, B12). La caféine apporte l'effet stimulant, tandis que les vitamines B contribuent à un métabolisme énergétique normal. La taurine et la glucuronolactone complètent la formule signature.</p></div>
+  </div>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">Est-ce que Monster contient de l'alcool ?<span class="cross"></span></button>
+    <div class="faq-a"><p>Non, jamais. Monster Energy est une boisson énergisante sans alcool. Le taux d'« énergie » vient de la caféine et des sucres, pas d'alcool. Le mélange avec des boissons alcoolisées est d'ailleurs déconseillé : la caféine peut masquer les effets de l'alcool.</p></div>
+  </div>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">Est-ce qu'il existe des Monster sans sucres ?<span class="cross"></span></button>
+    <div class="faq-a"><p>Oui, toute une gamme : la famille Ultra. La plus célèbre est l'Ultra White (la blanche), mais il existe aussi Ultra Black, Ultra Blue, Ultra Rosa et bien d'autres. Elles utilisent des édulcorants à la place du sucre, avec environ 3 kcal pour 100 ml. Le goût reste fidèle au style Monster.</p></div>
+  </div>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">La taurine de Monster vient-elle d'un animal ?<span class="cross"></span></button>
+    <div class="faq-a"><p>Non. Contrairement à une légende tenace, la taurine utilisée dans les boissons énergisantes est de synthèse en laboratoire — elle ne vient pas de taureau ni d'aucun animal. Les Monster classiques ne contiennent pas d'ingrédients d'origine animale.</p></div>
+  </div>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">Qui doit éviter de boire des Monster ?<span class="cross"></span></button>
+    <div class="faq-a"><p>Comme toute boisson à teneur élevée en caféine : les enfants, les adolescents, les femmes enceintes ou allaitantes, ainsi que les personnes sensibles à la caféine ou souffrant de troubles cardiaques. Pour les autres, c'est la même règle que le café : avec modération, et jamais juste avant de dormir.</p></div>
+  </div>
+
+  <div class="faq-item reveal">
+    <button class="faq-q" aria-expanded="false">Peut-on boire une Monster avant le sport ?<span class="cross"></span></button>
+    <div class="faq-a"><p>La caféine peut donner un boost avant un effort, mais attention : une Monster n'est pas une boisson d'hydratation. Elle ne remplace pas l'eau pendant l'exercice. Si tu t'entraînes intensément, privilégie l'eau ou une boisson de l'effort, et garde la canette comme coup de fouet ponctuel.</p></div>
+  </div>
+</section>
+
+<!-- ================= NEWSLETTER ================= -->
+<section class="join" id="contact">
+  <div class="giant" aria-hidden="true">THE HORDE</div>
+  <h2 class="reveal">Rejoins <em>la meute</em></h2>
+  <p class="reveal">Nouveaux parfums, events, collabs gaming et drops limités : sois le premier au courant. Promis, pas de spam — que de l'énergie brute.</p>
+  <form id="joinForm" class="reveal" novalidate>
+    <div class="join-inner">
+      <input type="email" id="joinMail" placeholder="TON ADRESSE MAIL" aria-label="Votre adresse mail" required>
+      <button type="submit">S'inscrire</button>
+    </div>
+  </form>
+  <div class="ok" id="joinOk">Bienvenue dans la meute. 🔥<br><b>Regarde ta boîte, la bête rôde déjà.</b></div>
+  <p class="legal">En t'inscrivant tu acceptes notre politique de confidentialité façon bête : on ne revend rien, jamais.</p>
+</section>
+
+</main>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="foot-grid">
+    <div class="foot-brand">
+      <span>MONSTER<em>·FR</em></span>
+      <p>Site réalisé à titre de <b>démonstration / concept</b>, non affilié à Monster Energy Company. « Monster Energy » et le logo griffé appartiennent à Monster Beverage Corporation. Les canettes 3D sont des <b>reproductions stylisées générées par code</b> (Three.js), à titre illustratif uniquement.</p>
+    </div>
+    <div class="foot-links">
+      <ul>
+        <h5>La gamme</h5>
+        <li><a href="#f-original">Original</a></li>
+        <li><a href="#f-ultra">Ultra</a></li>
+        <li><a href="#f-mango">Mango Loco</a></li>
+        <li><a href="#f-pipeline">Pipeline Punch</a></li>
+        <li><a href="#f-assault">Assault</a></li>
+        <li><a href="#f-pacific">Pacific Punch</a></li>
+      </ul>
+      <ul>
+        <h5>Le site</h5>
+        <li><a href="#blend">Le Blend</a></li>
+        <li><a href="#comparatif">Les chiffres</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="#contact">Newsletter</a></li>
+      </ul>
+      <ul>
+        <h5>Réseaux</h5>
+        <li><a href="#top">Instagram</a></li>
+        <li><a href="#top">TikTok</a></li>
+        <li><a href="#top">YouTube</a></li>
+        <li><a href="#top">X / Twitter</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot-bottom">
+    <span>© 2026 Site concept — UNLEASH THE BEAST</span>
+    <span>Mentions légales · CGU · Confidentialité</span>
+  </div>
+</footer>
+
+</body>
+</html>
