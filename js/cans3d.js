@@ -1,237 +1,57 @@
 /* =========================================================
    MONSTER ENERGY — Canettes 3D (Three.js)
-   Chaque modèle est reconstruit depuis la VRAIE photo :
-   1. la silhouette de la canette est extraite pixel par pixel
-      (canal alpha) -> largeur + centre à chaque hauteur ;
-   2. cette silhouette lissée devient le profil de révolution
-      du modèle 3D (chaque parfum a SES vraies proportions) ;
-   3. la photo est dépliée cylindriquement en texture 360° avec
-      un échantillonnage calé sur la géométrie (largeur locale
-      par ligne) -> aucune déformation au col ni à l'épaule.
+   Chaque canette est ton VRAI modèle 3D Blender (dossier
+   "3D textures"), converti en .glb (dossier models/) :
+   1. le mesh (corps, opercule, fond) et ses textures réelles
+      (étiquette du parfum, haut/bas de cannette) sont chargés
+      avec GLTFLoader ;
+   2. rendu : étiquette en couleurs exactes + vernis spéculaire
+      (reflets studio mobiles) + condensation (bump/roughness) ;
+   3. le modèle est recentré/normalisé en hauteur 5 pour garder
+      le même cadrage que la canette de secours.
    Interactions : rotation auto, drag avec inertie, tilt hero.
-   Fallback : étiquette procédurale si la photo échoue,
-   image .webp si WebGL est indisponible.
+   Fallback : canette procédurale pendant le chargement (et si le
+   .glb manque), image .webp si WebGL est indisponible.
    ========================================================= */
 import * as THREE from "../lib/three.module.js";
+import { GLTFLoader } from "../lib/jsm/loaders/GLTFLoader.js";
 
 const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /* =========================================================
-   1. ANALYSE DES PHOTOS : silhouette -> profil 3D + texture
+   1. MODÈLES 3D : chargement des .glb exportés depuis Blender
    ========================================================= */
-function smoothArray(arr, lo, hi, medWin, avgWin) {
-  /* médiane puis moyenne glissante sur [lo..hi] (ignore NaN) */
-  const n = arr.length;
-  const med = new Float32Array(n);
-  const hw = Math.floor(medWin / 2);
-  for (let y = lo; y <= hi; y++) {
-    const vals = [];
-    for (let k = -hw; k <= hw; k++) {
-      const yy = y + k;
-      if (yy >= lo && yy <= hi && !isNaN(arr[yy])) vals.push(arr[yy]);
-    }
-    vals.sort((a, b) => a - b);
-    med[y] = vals.length ? vals[Math.floor(vals.length / 2)] : NaN;
+const gltfLoader = new GLTFLoader();
+const glbCache = new Map();
+
+/* Orientation : dans le UV du modèle Blender, la griffe (logo) est
+   au centre de l'étiquette (u≈0.5). Ce capot la fait tourner pour
+   qu'elle regarde la caméra au chargement (le viewer démarre à
+   ry = PI, comme les anciennes canettes). */
+const GLB_FACE_FRONT = -2.479; /* rad — recalculable depuis les UV */
+
+/* charge une fois par parfum, clone ensuite pour chaque viewer */
+function loadGLBCan(flavor) {
+  if (!glbCache.has(flavor)) {
+    glbCache.set(
+      flavor,
+      new Promise((resolve, reject) => {
+        gltfLoader.load(
+          "models/can-" + flavor + ".glb",
+          (gltf) => resolve(gltf.scene),
+          undefined,
+          (err) => {
+            glbCache.delete(flavor);
+            reject(err);
+          }
+        );
+      })
+    );
   }
-  const out = new Float32Array(n);
-  const ha = Math.floor(avgWin / 2);
-  for (let y = lo; y <= hi; y++) {
-    let s = 0, c = 0;
-    for (let k = -ha; k <= ha; k++) {
-      const yy = y + k;
-      if (yy >= lo && yy <= hi && !isNaN(med[yy])) { s += med[yy]; c++; }
-    }
-    out[y] = c ? s / c : NaN;
-  }
-  return out;
+  return glbCache.get(flavor);
 }
 
-async function analyzeCan(flavor) {
-  const img = new Image();
-  img.src = "images/can-" + flavor + ".webp";
-  await img.decode();
-
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const src = document.createElement("canvas");
-  src.width = w;
-  src.height = h;
-  const sctx = src.getContext("2d", { willReadFrequently: true });
-  sctx.drawImage(img, 0, 0);
-  const data = sctx.getImageData(0, 0, w, h).data;
-
-  /* --- silhouette par ligne (alpha) --- */
-  const A_MIN = 30;
-  const L = new Float32Array(h).fill(NaN);
-  const R = new Float32Array(h).fill(NaN);
-  let yTop = -1, yBot = -1;
-  for (let y = 0; y < h; y++) {
-    let l = -1, r = -1;
-    for (let x = 0; x < w; x++) {
-      if (data[(y * w + x) * 4 + 3] > A_MIN) {
-        if (l < 0) l = x;
-        r = x;
-      }
-    }
-    if (l >= 0 && r - l > 3) {
-      L[y] = l;
-      R[y] = r;
-      if (yTop < 0) yTop = y;
-      yBot = y;
-    }
-  }
-  if (yTop < 0 || yBot - yTop < 50) return null;
-
-  /* --- largeur et centre par ligne --- */
-  const Wd = new Float32Array(h).fill(NaN);
-  const Ct = new Float32Array(h).fill(NaN);
-  let wMax = 0;
-  for (let y = yTop; y <= yBot; y++) {
-    if (!isNaN(L[y])) {
-      Wd[y] = R[y] - L[y];
-      Ct[y] = (L[y] + R[y]) / 2;
-      if (Wd[y] > wMax) wMax = Wd[y];
-    }
-  }
-  /* comble les trous par interpolation */
-  let lastV = NaN;
-  for (let y = yTop; y <= yBot; y++) {
-    if (!isNaN(Wd[y])) {
-      if (!isNaN(lastV) && y - lastV > 1) {
-        for (let k = lastV + 1; k < y; k++) {
-          const t = (k - lastV) / (y - lastV);
-          Wd[k] = Wd[lastV] + (Wd[y] - Wd[lastV]) * t;
-          Ct[k] = Ct[lastV] + (Ct[y] - Ct[lastV]) * t;
-          L[k] = Ct[k] - Wd[k] / 2;
-          R[k] = Ct[k] + Wd[k] / 2;
-        }
-      }
-      lastV = y;
-    }
-  }
-
-  /* --- lissage de la silhouette --- */
-  const Ws = smoothArray(Wd, yTop, yBot, 7, 11);
-  const Cs = smoothArray(Ct, yTop, yBot, 7, 11);
-
-  /* --- neutralise l'artefact "languette" au sommet : les lignes
-         anormalement étroites par rapport à la zone juste dessous --- */
-  {
-    const refZone = [];
-    const z0 = yTop + Math.floor((yBot - yTop) * 0.04);
-    const z1 = yTop + Math.floor((yBot - yTop) * 0.12);
-    for (let y = z0; y <= z1; y++) if (!isNaN(Ws[y])) refZone.push(Ws[y]);
-    refZone.sort((a, b) => a - b);
-    const wRef = refZone.length ? refZone[Math.floor(refZone.length / 2)] : wMax * 0.8;
-    for (let y = yTop; y < z0; y++) {
-      if (!isNaN(Ws[y]) && Ws[y] < 0.55 * wRef) {
-        Ws[y] = 0;
-        L[y] = NaN; /* ligne neutralisée : la fermeture 3D prendra le relais */
-        R[y] = NaN;
-      }
-    }
-    /* mémorise la première ligne pleinement valide comme sommet utile */
-    for (let y = yTop; y <= yBot; y++) {
-      if (!isNaN(L[y]) && Ws[y] > 0.2 * wRef) { yTop = y; break; }
-    }
-  }
-
-  /* --- profil 3D en unités (rayon corps = 1) --- */
-  const S = wMax / 2;                  /* pixels pour 1 unité (rayon) */
-  const yU = (ypix) => (yBot - ypix) / S;
-  const rU = (ypix) => clamp(Ws[ypix] / S, 0.02, 1.2);
-  const pts = [];
-  const P = (x, y) => pts.push(new THREE.Vector2(x, y));
-
-  /* fermeture du fond (dôme concave sous la canette) */
-  const rb = rU(yBot);
-  P(0.02, -0.055);
-  P(0.38 * rb, -0.052);
-  P(0.72 * rb, -0.042);
-  P(0.9 * rb, -0.022);
-  P(0.98 * rb, -0.006);
-
-  /* corps : échantillonnage de la silhouette réelle */
-  const Hpix = yBot - yTop;
-  const step = Math.max(4, Math.floor(Hpix / 72));
-  for (let y = yBot; y >= yTop; y -= step) {
-    const yu = yU(y);
-    if (yu - pts[pts.length - 1].y < 0.004 && y !== yTop) continue;
-    P(rU(y), yu);
-  }
-  /* s'assure que le sommet utile est présent */
-  const yTopU = yU(yTop);
-  if (yTopU - pts[pts.length - 1].y > 0.002) P(rU(yTop), yTopU);
-
-  /* fermeture du haut : lèvre du rebord rentrante + opercule
-     métallique en retrait, comme sur une vraie canette */
-  const rt = rU(yTop);
-  const lipY = yTopU + 0.010;        /* sommet de la lèvre */
-  const lidY = yTopU - 0.020;        /* plan de l'opercule (retrait) */
-  P(rt * 0.99, yTopU + 0.004);
-  P(rt * 0.96, lipY);
-  P(rt * 0.905, lipY);
-  P(rt * 0.88, lidY + 0.004);
-  P(rt * 0.88, lidY);
-  P(rt * 0.34, lidY);
-  P(0.02, lidY);
-
-  const minY = -0.055;
-  const maxY = lipY;
-  const H = maxY - minY;
-  const lid = { lidY, lipY, rt };
-
-  /* --- texture 360° : échantillonnage bilinéaire par ligne, avec la
-         largeur locale de la silhouette (cohérent avec la géométrie) --- */
-  const TW = 1280, TH = 1408;
-  const out = document.createElement("canvas");
-  out.width = TW;
-  out.height = TH;
-  const octx = out.getContext("2d");
-  const imgData = octx.createImageData(TW, TH);
-  const o = imgData.data;
-  for (let ty = 0; ty < TH; ty++) {
-    const v = 1 - (ty + 0.5) / TH;              /* v = 1 en haut */
-    const unitsY = minY + v * H;
-    const py = clamp(yBot - unitsY * S, yTop, yBot);
-    const yI = clamp(Math.round(py), yTop, yBot);
-    const half = Ws[yI] / 2;
-    const cen = Cs[yI];
-    const l = clamp(L[yI], 0, w - 1);
-    const r = clamp(R[yI], 0, w - 1);
-    const y0 = Math.floor(py), fy = py - y0;
-    const y1 = Math.min(y0 + 1, yBot);
-    for (let tx = 0; tx < TW; tx++) {
-      const a = ((tx + 0.5) / TW) * Math.PI * 2;
-      const s = Math.sin(a);
-      /* face : dépliage direct (pxF) ; dos : miroir (pxB) pour que le
-         texte reste lisible en tournant, comme imprimé des deux côtés.
-         Fondu serré autour des bords de profil pour la couture. */
-      const pxF = cen - half * s;
-      const pxB = cen + half * s;
-      const k = clamp(0.5 + 4.5 * Math.cos(a), 0, 1);
-      const px = clamp(pxF * (1 - k) + pxB * k, l, r);
-      /* interpolation bilinéaire dans la photo source */
-      const x0 = Math.floor(px), fx = px - x0;
-      const x1 = Math.min(x0 + 1, r);
-      const i00 = (y0 * w + x0) * 4, i10 = (y0 * w + x1) * 4;
-      const i01 = (y1 * w + x0) * 4, i11 = (y1 * w + x1) * 4;
-      const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy);
-      const w01 = (1 - fx) * fy, w11 = fx * fy;
-      const di = (ty * TW + tx) * 4;
-      o[di]     = data[i00] * w00 + data[i10] * w10 + data[i01] * w01 + data[i11] * w11;
-      o[di + 1] = data[i00 + 1] * w00 + data[i10 + 1] * w10 + data[i01 + 1] * w01 + data[i11 + 1] * w11;
-      o[di + 2] = data[i00 + 2] * w00 + data[i10 + 2] * w10 + data[i01 + 2] * w01 + data[i11 + 2] * w11;
-      o[di + 3] = 255;
-    }
-  }
-  octx.putImageData(imgData, 0, 0);
-
-  const tex = new THREE.CanvasTexture(out);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.RepeatWrapping;
-  return { tex, pts, minY, maxY, H, lid };
-}
 
 /* =========================================================
    2. ÉTIQUETTES DE SECOURS (canvas procédural, par parfum)
@@ -679,17 +499,7 @@ function canProfilePts() {
 }
 const FB_MIN = 0, FB_MAX = 4.98;
 
-/* lathe avec v proportionnel à la hauteur réelle du profil */
-function latheFromProfile(pts, minY, maxY) {
-  const geo = new THREE.LatheGeometry(pts, 128);
-  const pos = geo.attributes.position;
-  const uv = geo.attributes.uv;
-  for (let i = 0; i < pos.count; i++) {
-    uv.setY(i, clamp((pos.getY(i) - minY) / (maxY - minY), 0, 1));
-  }
-  uv.needsUpdate = true;
-  return geo;
-}
+
 
 /* métal : dessous + couvercle + rivet + languette (fallback) */
 function addMetalParts(group) {
@@ -799,86 +609,71 @@ function getDropMaps() {
   return _drops;
 }
 
-/* teinte de languette par parfum */
-const TAB_COLOR = {
-  assault: 0xc20f22,
-  mango: 0x1896d2,
-  original: 0xd9dde1,
-  pipeline: 0xd9dde1,
-  pacific: 0xd9dde1,
-  ultra: 0xd9dde1,
-};
-
-/* languette d'ouverture extrudée (capsule ajourée) */
-function buildTab(color) {
-  const sh = new THREE.Shape();
-  const L = 0.42, R = 0.125;
-  sh.absarc(-L / 2 + R, 0, R, Math.PI / 2, Math.PI * 1.5, false);
-  sh.absarc(L / 2 - R, 0, R, Math.PI * 1.5, Math.PI / 2, false);
-  sh.closePath();
-  const hole = new THREE.Path();
-  hole.absarc(L * 0.16, 0, 0.058, 0, Math.PI * 2, true);
-  sh.holes.push(hole);
-  const geo = new THREE.ExtrudeGeometry(sh, {
-    depth: 0.026, bevelEnabled: true, bevelThickness: 0.007,
-    bevelSize: 0.007, bevelSegments: 2, curveSegments: 28,
-  });
-  const mat = new THREE.MeshStandardMaterial({
-    color, metalness: 1.0, roughness: 0.3, envMapIntensity: 2.8,
-  });
-  const m = new THREE.Mesh(geo, mat);
-  m.rotation.x = -Math.PI / 2;
-  return m;
-}
-
-/* canette photo-réaliste :
-   - profil extrait de la photo elle-même
-   - couche spéculaire additive (reflets studio mobile sur l'alu)
-   - condensation (bump + roughness)
-   - languette + rivet sur l'opercule en retrait */
-function buildPhotoCan(flavor, analysis) {
-  const group = new THREE.Group();
+/* canette 3D réelle (modèle Blender exporté en .glb) :
+   - étiquette : couleurs exactes de la texture + vernis spéculaire ;
+   - haut/bas de cannette : alu imprimé réfléchissant ;
+   - condensation (bump + roughness) sur les deux ;
+   - normalisée en hauteur 5, centrée, logo face caméra. */
+function buildGLBCan(flavor, source, anisotropy) {
   const drops = getDropMaps();
-  const geo = latheFromProfile(analysis.pts, analysis.minY, analysis.maxY);
+  /* can = objet piloté par le viewer (la boucle réécrit sa rotation) ;
+     pivot interne = capot d'orientation du logo */
+  const can = new THREE.Group();
+  const pivot = new THREE.Group();
+  const model = source.clone(true); /* clone par viewer (hero + section) */
 
-  /* 1. alu imprimé : couleurs exactes de la photo */
-  const mat = new THREE.MeshBasicMaterial({ map: analysis.tex, toneMapped: false });
-  group.add(new THREE.Mesh(geo, mat));
-
-  /* 2. vernis spéculaire : reflets qui glissent pendant la rotation */
-  const glaze = new THREE.MeshStandardMaterial({
+  /* vernis : reflets studio qui glissent pendant la rotation */
+  const glazeMat = new THREE.MeshStandardMaterial({
     color: 0x2e2e2e, metalness: 1.0, roughness: 1.0,
     roughnessMap: drops.rough, bumpMap: drops.bump, bumpScale: 0.7,
     envMapIntensity: 1.6,
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
   });
-  const glazeMesh = new THREE.Mesh(geo, glaze);
-  glazeMesh.scale.set(1.0016, 1.0003, 1.0016); /* anti z-fight */
-  group.add(glazeMesh);
 
-  /* 3. opercule : languette teintée + rivet + bec d'ouverture */
-  const { lidY } = analysis.lid;
-  const rivetM = new THREE.MeshStandardMaterial({
-    color: 0xe4e8ec, metalness: 1.0, roughness: 0.22, envMapIntensity: 2.8,
+  /* collecte AVANT traitement (pas de traverse pendant modification) */
+  const meshes = [];
+  model.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
   });
-  const tab = buildTab(TAB_COLOR[flavor] || 0xd9dde1);
-  tab.position.set(0.10, lidY + 0.006, 0);
-  tab.rotation.z = -0.35;
-  group.add(tab);
-  const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.034, 24), rivetM);
-  rivet.position.set(-0.08, lidY + 0.008, 0);
-  group.add(rivet);
-  /* ouverture de versement : cavité sombre devant le nez de la languette */
-  const pour = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 28),
-    new THREE.MeshStandardMaterial({ color: 0x0b0b0c, metalness: 0.4, roughness: 0.85 })
-  );
-  pour.rotation.x = -Math.PI / 2;
-  pour.scale.set(0.085, 0.12, 1);
-  pour.position.set(0.34, lidY + 0.002, 0);
-  group.add(pour);
 
-  return group;
+  for (const o of meshes) {
+    const base = o.material;
+    const map = base && base.map ? base.map : null;
+    if (map) {
+      map.anisotropy = Math.min(16, anisotropy);
+      map.colorSpace = THREE.SRGBColorSpace;
+    }
+    const isLabel = map && map.image && map.image.width >= 500;
+    if (isLabel) {
+      /* étiquette : couleurs brutes de la texture + vernis par-dessus */
+      o.material = new THREE.MeshBasicMaterial({ map, toneMapped: false });
+      const coat = new THREE.Mesh(o.geometry, glazeMat);
+      o.add(coat); /* même géo, hérite de la transform du mesh */
+    } else {
+      /* métal imprimé (haut/bas de cannette) */
+      o.material = new THREE.MeshStandardMaterial({
+        map,
+        color: base && base.color ? base.color : new THREE.Color(0xffffff),
+        metalness: 0.9, roughness: 0.32, envMapIntensity: 1.35,
+        roughnessMap: drops.rough, bumpMap: drops.bump, bumpScale: 0.35,
+      });
+    }
+  }
+
+  /* normalise : hauteur 5 unités, centré à l'origine (repère du viewer) */
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const h = Math.max(1e-6, box.max.y - box.min.y);
+  model.scale.setScalar(5 / h);
+  model.updateMatrixWorld(true);
+  box.setFromObject(model);
+  model.position.sub(box.getCenter(new THREE.Vector3()));
+
+  /* la griffe fait face à la caméra au démarrage */
+  pivot.rotation.y = GLB_FACE_FRONT;
+  pivot.add(model);
+  can.add(pivot);
+  return can;
 }
 
 /* canette de secours : étiquette procédurale + coque colorée */
@@ -974,22 +769,19 @@ function createViewer(container) {
   fitCamera();
 
   if (PAINT[flavor]) {
-    analyzeCan(flavor)
-      .then((analysis) => {
-        if (!analysis) return;
-        analysis.tex.anisotropy = Math.min(16, aniso);
-        const photo = buildPhotoCan(flavor, analysis);
-        photo.position.y = -(analysis.minY + analysis.maxY) / 2;
-        photo.rotation.copy(can.rotation);
+    loadGLBCan(flavor)
+      .then((source) => {
+        const glb = buildGLBCan(flavor, source, aniso);
+        glb.rotation.copy(can.rotation);
         scene.remove(can);
-        scene.add(photo);
-        v.can = photo;
-        v.minY = analysis.minY;
-        v.maxY = analysis.maxY;
-        v.H = analysis.H;
-        fitCamera(); /* cadre sur les proportions réelles du parfum */
+        scene.add(glb);
+        v.can = glb;
+        v.minY = -2.5;
+        v.maxY = 2.5;
+        v.H = 5;
+        fitCamera(); /* cadre le modèle réel */
       })
-      .catch(() => {});
+      .catch(() => {}); /* .glb absent : la canette de secours reste */
   }
 
   /* --- interactions --- */
