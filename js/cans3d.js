@@ -163,19 +163,27 @@ async function analyzeCan(flavor) {
   const yTopU = yU(yTop);
   if (yTopU - pts[pts.length - 1].y > 0.002) P(rU(yTop), yTopU);
 
-  /* fermeture du haut (dôme plat du capot) */
+  /* fermeture du haut : lèvre du rebord rentrante + opercule
+     métallique en retrait, comme sur une vraie canette */
   const rt = rU(yTop);
-  P(rt * 0.88, yTopU + 0.006);
-  P(rt * 0.55, yTopU + 0.013);
-  P(0.02, yTopU + 0.017);
+  const lipY = yTopU + 0.010;        /* sommet de la lèvre */
+  const lidY = yTopU - 0.020;        /* plan de l'opercule (retrait) */
+  P(rt * 0.99, yTopU + 0.004);
+  P(rt * 0.96, lipY);
+  P(rt * 0.905, lipY);
+  P(rt * 0.88, lidY + 0.004);
+  P(rt * 0.88, lidY);
+  P(rt * 0.34, lidY);
+  P(0.02, lidY);
 
   const minY = -0.055;
-  const maxY = yTopU + 0.017;
+  const maxY = lipY;
   const H = maxY - minY;
+  const lid = { lidY, lipY, rt };
 
-  /* --- texture 360° : échantillonnage par ligne avec la largeur
-         locale de la silhouette (cohérent avec la géométrie) --- */
-  const TW = 1024, TH = 1280;
+  /* --- texture 360° : échantillonnage bilinéaire par ligne, avec la
+         largeur locale de la silhouette (cohérent avec la géométrie) --- */
+  const TW = 1280, TH = 1408;
   const out = document.createElement("canvas");
   out.width = TW;
   out.height = TH;
@@ -186,29 +194,34 @@ async function analyzeCan(flavor) {
     const v = 1 - (ty + 0.5) / TH;              /* v = 1 en haut */
     const unitsY = minY + v * H;
     const py = clamp(yBot - unitsY * S, yTop, yBot);
-    const pi = Math.round(py);
-    const half = Ws[pi] / 2;
-    const cen = Cs[pi];
-    const l = clamp(L[pi], 0, w - 1);
-    const r = clamp(R[pi], 0, w - 1);
+    const yI = clamp(Math.round(py), yTop, yBot);
+    const half = Ws[yI] / 2;
+    const cen = Cs[yI];
+    const l = clamp(L[yI], 0, w - 1);
+    const r = clamp(R[yI], 0, w - 1);
+    const y0 = Math.floor(py), fy = py - y0;
+    const y1 = Math.min(y0 + 1, yBot);
     for (let tx = 0; tx < TW; tx++) {
       const a = ((tx + 0.5) / TW) * Math.PI * 2;
       const s = Math.sin(a);
       /* face : dépliage direct (pxF) ; dos : miroir (pxB) pour que le
          texte reste lisible en tournant, comme imprimé des deux côtés.
-         Fondu sur ±10° autour des bords de profil pour la couture. */
+         Fondu serré autour des bords de profil pour la couture. */
       const pxF = cen - half * s;
       const pxB = cen + half * s;
       const k = clamp(0.5 + 4.5 * Math.cos(a), 0, 1);
-      let px = pxF * (1 - k) + pxB * k;
-      if (px < l) px = l;
-      else if (px > r) px = r;
-      const x0 = clamp(Math.floor(px), 0, w - 1);
-      const si = (pi * w + x0) * 4;
+      const px = clamp(pxF * (1 - k) + pxB * k, l, r);
+      /* interpolation bilinéaire dans la photo source */
+      const x0 = Math.floor(px), fx = px - x0;
+      const x1 = Math.min(x0 + 1, r);
+      const i00 = (y0 * w + x0) * 4, i10 = (y0 * w + x1) * 4;
+      const i01 = (y1 * w + x0) * 4, i11 = (y1 * w + x1) * 4;
+      const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy, w11 = fx * fy;
       const di = (ty * TW + tx) * 4;
-      o[di] = data[si];
-      o[di + 1] = data[si + 1];
-      o[di + 2] = data[si + 2];
+      o[di]     = data[i00] * w00 + data[i10] * w10 + data[i01] * w01 + data[i11] * w11;
+      o[di + 1] = data[i00 + 1] * w00 + data[i10 + 1] * w10 + data[i01 + 1] * w01 + data[i11 + 1] * w11;
+      o[di + 2] = data[i00 + 2] * w00 + data[i10 + 2] * w10 + data[i01 + 2] * w01 + data[i11 + 2] * w11;
       o[di + 3] = 255;
     }
   }
@@ -217,7 +230,7 @@ async function analyzeCan(flavor) {
   const tex = new THREE.CanvasTexture(out);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
-  return { tex, pts, minY, maxY, H };
+  return { tex, pts, minY, maxY, H, lid };
 }
 
 /* =========================================================
@@ -617,20 +630,26 @@ function getEnv(renderer) {
   cv.height = 256;
   const c = cv.getContext("2d");
   const g = c.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, "#55595e");
-  g.addColorStop(0.5, "#141619");
-  g.addColorStop(1, "#030404");
+  g.addColorStop(0, "#6a6f75");
+  g.addColorStop(0.42, "#1a1d20");
+  g.addColorStop(1, "#050607");
   c.fillStyle = g;
   c.fillRect(0, 0, 512, 256);
-  c.globalAlpha = 0.95;
+  /* grand softbox latéral + bandelettes studio */
   c.fillStyle = "#ffffff";
-  c.fillRect(56, 26, 34, 110);
-  c.fillRect(200, 18, 22, 130);
-  c.fillRect(360, 30, 44, 100);
-  c.fillRect(455, 45, 26, 80);
-  c.globalAlpha = 0.5;
-  c.fillRect(120, 70, 60, 26);
-  c.fillRect(300, 60, 40, 22);
+  c.globalAlpha = 0.95;
+  c.fillRect(48, 18, 44, 150);
+  c.globalAlpha = 0.85;
+  c.fillRect(196, 14, 24, 140);
+  c.fillRect(352, 24, 56, 120);
+  c.globalAlpha = 0.6;
+  c.fillRect(452, 40, 26, 90);
+  c.fillRect(120, 66, 60, 26);
+  c.globalAlpha = 0.4;
+  c.fillRect(300, 56, 40, 22);
+  /* bande lumineuse d'horizon (reflet continu sur l'alu) */
+  c.globalAlpha = 0.35;
+  c.fillRect(0, 118, 512, 6);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -662,7 +681,7 @@ const FB_MIN = 0, FB_MAX = 4.98;
 
 /* lathe avec v proportionnel à la hauteur réelle du profil */
 function latheFromProfile(pts, minY, maxY) {
-  const geo = new THREE.LatheGeometry(pts, 96);
+  const geo = new THREE.LatheGeometry(pts, 128);
   const pos = geo.attributes.position;
   const uv = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
@@ -698,11 +717,167 @@ function addMetalParts(group) {
   group.add(tab);
 }
 
-/* canette photo-réaliste : profil extrait de la photo elle-même */
-function buildPhotoCan(analysis) {
+/* =========================================================
+   4b. CONDENSATION + LANGUETTE (détail photoréaliste)
+   ========================================================= */
+let _drops = null;
+function getDropMaps() {
+  if (_drops) return _drops;
+  const rnd = mulberry(777);
+
+  /* positions partagées : le bump et la roughness tombent EXACTEMENT
+     sur les mêmes gouttes (sinon les perles brillent sans dénivellé) */
+  const P = [];
+  for (let i = 0; i < 460; i++)
+    P.push([rnd() * 1024, rnd() * 1024, 1, 1.6 + Math.pow(rnd(), 2.0) * 6.8]);
+  for (let i = 0; i < 46; i++) /* coulures : [x, y, longueur, demi-largeur] */
+    P.push([rnd() * 1024, rnd() * 1024, 24 + rnd() * 100, 0.9 + rnd() * 1.6, -1]);
+
+  /* bump : perles sphériques + coulures */
+  const bc = document.createElement("canvas");
+  bc.width = bc.height = 1024;
+  const b = bc.getContext("2d");
+  b.fillStyle = "#808080";
+  b.fillRect(0, 0, 1024, 1024);
+  for (const [x, y, a, r, drip] of P) {
+    if (drip === -1) { /* coulure verticale terminée par une perle */
+      const len = a, wd = r;
+      const g = b.createLinearGradient(x, y, x, y + len);
+      g.addColorStop(0, "rgba(215,215,215,0.55)");
+      g.addColorStop(1, "rgba(128,128,128,0)");
+      b.fillStyle = g;
+      b.fillRect(x - wd / 2, y, wd, len);
+      const g2 = b.createRadialGradient(x, y + len, 0, x, y + len, wd * 1.6);
+      g2.addColorStop(0, "rgba(255,255,255,0.85)");
+      g2.addColorStop(1, "rgba(128,128,128,0)");
+      b.fillStyle = g2;
+      b.beginPath(); b.arc(x, y + len, wd * 1.6, 0, Math.PI * 2); b.fill();
+      continue;
+    }
+    const g = b.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, "rgba(255,255,255,0.95)");
+    g.addColorStop(0.55, "rgba(205,205,205,0.4)");
+    g.addColorStop(1, "rgba(128,128,128,0)");
+    b.fillStyle = g;
+    b.beginPath();
+    b.arc(x, y, r, 0, Math.PI * 2);
+    b.fill();
+  }
+
+  /* roughness : les perles sont quasi-miroir, l'alu reste satiné */
+  const rc = document.createElement("canvas");
+  rc.width = rc.height = 1024;
+  const q = rc.getContext("2d");
+  q.fillStyle = "rgb(58,58,58)";
+  q.fillRect(0, 0, 1024, 1024);
+  for (const [x, y, a, r, drip] of P) {
+    if (drip === -1) {
+      const len = a, wd = r;
+      const g = q.createLinearGradient(x, y, x, y + len);
+      g.addColorStop(0, "rgba(18,18,18,0.8)");
+      g.addColorStop(1, "rgba(18,18,18,0)");
+      q.fillStyle = g;
+      q.fillRect(x - wd / 2, y, wd, len);
+      q.beginPath(); q.arc(x, y + len, wd * 1.6, 0, Math.PI * 2); q.fill();
+      continue;
+    }
+    const g = q.createRadialGradient(x, y, 0, x, y, r * 1.18);
+    g.addColorStop(0, "rgba(8,8,8,1)");
+    g.addColorStop(0.6, "rgba(10,10,10,0.85)");
+    g.addColorStop(1, "rgba(10,10,10,0)");
+    q.fillStyle = g;
+    q.beginPath();
+    q.arc(x, y, r * 1.18, 0, Math.PI * 2);
+    q.fill();
+  }
+
+  const bump = new THREE.CanvasTexture(bc);
+  const rough = new THREE.CanvasTexture(rc);
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  rough.wrapS = rough.wrapT = THREE.RepeatWrapping;
+  _drops = { bump, rough };
+  return _drops;
+}
+
+/* teinte de languette par parfum */
+const TAB_COLOR = {
+  assault: 0xc20f22,
+  mango: 0x1896d2,
+  original: 0xd9dde1,
+  pipeline: 0xd9dde1,
+  pacific: 0xd9dde1,
+  ultra: 0xd9dde1,
+};
+
+/* languette d'ouverture extrudée (capsule ajourée) */
+function buildTab(color) {
+  const sh = new THREE.Shape();
+  const L = 0.42, R = 0.125;
+  sh.absarc(-L / 2 + R, 0, R, Math.PI / 2, Math.PI * 1.5, false);
+  sh.absarc(L / 2 - R, 0, R, Math.PI * 1.5, Math.PI / 2, false);
+  sh.closePath();
+  const hole = new THREE.Path();
+  hole.absarc(L * 0.16, 0, 0.058, 0, Math.PI * 2, true);
+  sh.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(sh, {
+    depth: 0.026, bevelEnabled: true, bevelThickness: 0.007,
+    bevelSize: 0.007, bevelSegments: 2, curveSegments: 28,
+  });
+  const mat = new THREE.MeshStandardMaterial({
+    color, metalness: 1.0, roughness: 0.3, envMapIntensity: 2.8,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.x = -Math.PI / 2;
+  return m;
+}
+
+/* canette photo-réaliste :
+   - profil extrait de la photo elle-même
+   - couche spéculaire additive (reflets studio mobile sur l'alu)
+   - condensation (bump + roughness)
+   - languette + rivet sur l'opercule en retrait */
+function buildPhotoCan(flavor, analysis) {
   const group = new THREE.Group();
+  const drops = getDropMaps();
+  const geo = latheFromProfile(analysis.pts, analysis.minY, analysis.maxY);
+
+  /* 1. alu imprimé : couleurs exactes de la photo */
   const mat = new THREE.MeshBasicMaterial({ map: analysis.tex, toneMapped: false });
-  group.add(new THREE.Mesh(latheFromProfile(analysis.pts, analysis.minY, analysis.maxY), mat));
+  group.add(new THREE.Mesh(geo, mat));
+
+  /* 2. vernis spéculaire : reflets qui glissent pendant la rotation */
+  const glaze = new THREE.MeshStandardMaterial({
+    color: 0x2e2e2e, metalness: 1.0, roughness: 1.0,
+    roughnessMap: drops.rough, bumpMap: drops.bump, bumpScale: 0.7,
+    envMapIntensity: 1.6,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const glazeMesh = new THREE.Mesh(geo, glaze);
+  glazeMesh.scale.set(1.0016, 1.0003, 1.0016); /* anti z-fight */
+  group.add(glazeMesh);
+
+  /* 3. opercule : languette teintée + rivet + bec d'ouverture */
+  const { lidY } = analysis.lid;
+  const rivetM = new THREE.MeshStandardMaterial({
+    color: 0xe4e8ec, metalness: 1.0, roughness: 0.22, envMapIntensity: 2.8,
+  });
+  const tab = buildTab(TAB_COLOR[flavor] || 0xd9dde1);
+  tab.position.set(0.10, lidY + 0.006, 0);
+  tab.rotation.z = -0.35;
+  group.add(tab);
+  const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.034, 24), rivetM);
+  rivet.position.set(-0.08, lidY + 0.008, 0);
+  group.add(rivet);
+  /* ouverture de versement : cavité sombre devant le nez de la languette */
+  const pour = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 28),
+    new THREE.MeshStandardMaterial({ color: 0x0b0b0c, metalness: 0.4, roughness: 0.85 })
+  );
+  pour.rotation.x = -Math.PI / 2;
+  pour.scale.set(0.085, 0.12, 1);
+  pour.position.set(0.34, lidY + 0.002, 0);
+  group.add(pour);
+
   return group;
 }
 
@@ -802,8 +977,8 @@ function createViewer(container) {
     analyzeCan(flavor)
       .then((analysis) => {
         if (!analysis) return;
-        analysis.tex.anisotropy = Math.min(8, aniso);
-        const photo = buildPhotoCan(analysis);
+        analysis.tex.anisotropy = Math.min(16, aniso);
+        const photo = buildPhotoCan(flavor, analysis);
         photo.position.y = -(analysis.minY + analysis.maxY) / 2;
         photo.rotation.copy(can.rotation);
         scene.remove(can);
@@ -865,7 +1040,7 @@ function createViewer(container) {
   const resize = () => {
     const w = stage.clientWidth || 1;
     const h = stage.clientHeight || 1;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
