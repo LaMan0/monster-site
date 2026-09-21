@@ -793,7 +793,10 @@ function createViewer(container, opts) {
 
   const reveal = () => {
     v.ready = true;
-    container.classList.add("gl-on"); /* masque le .webp, montre la 3D */
+    /* fondu enchaine : la 3D apparait par-dessus le .webp (pose neutre
+       alignee), puis l'image s'efface une fois la 3D en place */
+    container.classList.add("gl-on");
+    setTimeout(() => container.classList.add("swap-done"), 550);
     resize();
   };
 

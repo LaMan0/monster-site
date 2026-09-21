@@ -119,13 +119,18 @@ nav a:hover::after{width:100%}
   filter:drop-shadow(0 26px 42px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(61,255,28,.18))}
 @keyframes canFloat{0%,100%{transform:translateY(0) rotate(-1.2deg)}50%{transform:translateY(-16px) rotate(1.4deg)}}
 
-/* ---------- scenes WebGL 3D ---------- */
-.can3d-stage{position:relative;width:100%;aspect-ratio:10/23;cursor:grab;touch-action:pan-y;
-  user-select:none;-webkit-user-select:none}
+/* ---------- scenes WebGL 3D ----------
+   La scene se superpose EXACTEMENT au .webp (qui garde la boite en
+   page) : au chargement la 3D fond en fondu PAR-DESSUS l'image, puis
+   l'image s'efface (classe .swap-done posee apres le premier rendu).
+   Plus aucun flash image -> 3D. */
+.can3d-stage{position:absolute;inset:0;cursor:grab;touch-action:pan-y;
+  user-select:none;-webkit-user-select:none;opacity:0}
 .can3d:not(.gl-on) .can3d-stage{display:none}
-.can3d.gl-on .can3d-stage{display:block;animation:canStageIn .9s cubic-bezier(.2,.7,.2,1) both}
-@keyframes canStageIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:none}}
-.can3d.gl-on .can-img-fb{display:none}
+.can3d.gl-on .can3d-stage{display:block;opacity:1;transition:opacity .45s ease}
+.can3d.gl-on .can-img-fb{animation:none} /* pose neutre : alignee avec la 3D */
+.can3d.gl-on.swap-done .can-img-fb{opacity:0;visibility:hidden;
+  transition:opacity .35s ease, visibility 0s linear .35s}
 .can3d-stage:active{cursor:grabbing}
 .can3d-stage canvas{position:absolute;inset:0;display:block;width:100%!important;height:100%!important}
 
