@@ -169,12 +169,22 @@
     const ctx = canvas.getContext("2d");
     let W, H, running = false;
     const parts = [];
-    function resize() {
-      W = canvas.width = canvas.offsetWidth;
-      H = canvas.height = canvas.offsetHeight;
+
+    /* sprite de braise pré-rendu UNE fois : drawImage coûte ~60x moins
+       cher qu'un arc + shadowBlur recalculé par particule et par frame */
+    const SPRITE = 32;
+    const sprite = document.createElement("canvas");
+    sprite.width = sprite.height = SPRITE;
+    {
+      const s = sprite.getContext("2d");
+      const g = s.createRadialGradient(SPRITE / 2, SPRITE / 2, 0, SPRITE / 2, SPRITE / 2, SPRITE / 2);
+      g.addColorStop(0, "rgba(220,255,170,0.95)");
+      g.addColorStop(0.3, "rgba(120,255,80,0.6)");
+      g.addColorStop(1, "rgba(61,255,28,0)");
+      s.fillStyle = g;
+      s.fillRect(0, 0, SPRITE, SPRITE);
     }
-    resize();
-    addEventListener("resize", resize);
+
     function makeSpark() {
       return {
         x: Math.random() * W,
@@ -186,7 +196,16 @@
         flick: Math.random() * Math.PI * 2,
       };
     }
-    for (let i = 0; i < 70; i++) parts.push(makeSpark());
+    function resize() {
+      W = canvas.width = canvas.offsetWidth;
+      H = canvas.height = canvas.offsetHeight;
+      /* densité adaptée à la surface (moins de particules sur mobile) */
+      const target = Math.max(24, Math.min(70, Math.round((W * H) / 26000)));
+      while (parts.length > target) parts.pop();
+      while (parts.length < target) parts.push(makeSpark());
+    }
+    resize();
+    addEventListener("resize", resize);
     function frame(t) {
       if (!running) return;
       ctx.clearRect(0, 0, W, H);
@@ -196,15 +215,11 @@
         if (p.y < -16 || p.x < -16 || p.x > W + 16)
           Object.assign(p, makeSpark(), { y: H + 10 });
         const glow = p.a * (0.55 + 0.45 * Math.sin(t / 300 + p.flick));
-        ctx.save();
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = "rgba(61,255,28," + glow + ")";
-        ctx.fillStyle = "rgba(120,255,80," + glow + ")";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const d = p.r * 6;
+        ctx.globalAlpha = glow;
+        ctx.drawImage(sprite, p.x - d / 2, p.y - d / 2, d, d);
       }
+      ctx.globalAlpha = 1;
       requestAnimationFrame(frame);
     }
     new IntersectionObserver((entries) => {
@@ -231,11 +246,14 @@
       { passive: true }
     );
     (function loop() {
-      cx += (tx - cx) * 0.22;
-      cy += (ty - cy) * 0.22;
-      // on deplace l'enveloppe : le .ring interne est centre en (0,0) via translate(-50%,-50%)
-      // donc la taille du cercle n'a aucune importance, il reste pile sur le curseur.
-      cursor.style.transform = "translate3d(" + cx + "px," + cy + "px,0)";
+      // n'écrit le DOM que si l'anneau bouge encore (zéro coût au repos)
+      if (Math.abs(tx - cx) > 0.05 || Math.abs(ty - cy) > 0.05) {
+        cx += (tx - cx) * 0.22;
+        cy += (ty - cy) * 0.22;
+        // on deplace l'enveloppe : le .ring interne est centre en (0,0) via translate(-50%,-50%)
+        // donc la taille du cercle n'a aucune importance, il reste pile sur le curseur.
+        cursor.style.transform = "translate3d(" + cx + "px," + cy + "px,0)";
+      }
       requestAnimationFrame(loop);
     })();
     document

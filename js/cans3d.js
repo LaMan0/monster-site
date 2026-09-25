@@ -1,17 +1,21 @@
 /* =========================================================
    MONSTER ENERGY — Canettes 3D (Three.js)
    Chaque canette est ton VRAI modèle 3D Blender (dossier
-   "3D textures"), converti en .glb (dossier models/) :
+   "3D textures"), converti en .glb optimisé (dossier models/) :
    1. le mesh (corps, opercule, fond) et ses textures réelles
       (étiquette du parfum, haut/bas de cannette) sont chargés
-      avec GLTFLoader ;
+      avec GLTFLoader — le hero d'abord, les autres de façon
+      étalée (le .webp de la page sert d'aperçu entre-temps) ;
    2. rendu : étiquette en couleurs exactes + vernis spéculaire
-      (reflets studio mobiles) + condensation (bump/roughness) ;
+      (reflets studio mobiles) + condensation (bump/roughness
+      fusionnés dans UNE texture) ;
    3. le modèle est recentré/normalisé en hauteur 5 pour garder
       le même cadrage que la canette de secours.
+   Perfs : pixel ratio plafonné à 2, rendu suspendu hors écran,
+   résolution adaptative si les FPS chutent (matériel modeste).
    Interactions : rotation auto, drag avec inertie, tilt hero.
-   Fallback : canette procédurale pendant le chargement (et si le
-   .glb manque), image .webp si WebGL est indisponible.
+   Fallback : image .webp si WebGL est indisponible, canette
+   procédurale seulement si le .glb est introuvable.
    ========================================================= */
 import * as THREE from "../lib/three.module.js";
 import { GLTFLoader } from "../lib/jsm/loaders/GLTFLoader.js";
@@ -543,7 +547,7 @@ function getDropMaps() {
   for (let i = 0; i < 46; i++) /* coulures : [x, y, longueur, demi-largeur] */
     P.push([rnd() * 1024, rnd() * 1024, 24 + rnd() * 100, 0.9 + rnd() * 1.6, -1]);
 
-  /* bump : perles sphériques + coulures */
+  /* hauteur (bump) : perles sphériques + coulures */
   const bc = document.createElement("canvas");
   bc.width = bc.height = 1024;
   const b = bc.getContext("2d");
@@ -601,11 +605,29 @@ function getDropMaps() {
     q.fill();
   }
 
-  const bump = new THREE.CanvasTexture(bc);
-  const rough = new THREE.CanvasTexture(rc);
-  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
-  rough.wrapS = rough.wrapT = THREE.RepeatWrapping;
-  _drops = { bump, rough };
+  /* fusion dans UNE SEULE texture : canal R = hauteur (bumpMap lit .r),
+     canal G = roughness (roughnessMap lit .g) → 2× moins de mémoire GPU
+     et un upload de texture au lieu de deux par contexte WebGL. */
+  const tinted = (src, rgb) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 1024;
+    const x = c.getContext("2d");
+    x.fillStyle = rgb;
+    x.fillRect(0, 0, 1024, 1024);
+    x.globalCompositeOperation = "multiply";
+    x.drawImage(src, 0, 0);
+    return c;
+  };
+  const mc = document.createElement("canvas");
+  mc.width = mc.height = 1024;
+  const m = mc.getContext("2d");
+  m.drawImage(tinted(bc, "#ff0000"), 0, 0);
+  m.globalCompositeOperation = "lighter";
+  m.drawImage(tinted(rc, "#00ff00"), 0, 0);
+
+  const map = new THREE.CanvasTexture(mc);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  _drops = { map };
   return _drops;
 }
 
@@ -625,7 +647,7 @@ function buildGLBCan(flavor, source, anisotropy) {
   /* vernis : reflets studio qui glissent pendant la rotation */
   const glazeMat = new THREE.MeshStandardMaterial({
     color: 0x2e2e2e, metalness: 1.0, roughness: 1.0,
-    roughnessMap: drops.rough, bumpMap: drops.bump, bumpScale: 0.7,
+    roughnessMap: drops.map, bumpMap: drops.map, bumpScale: 0.7,
     envMapIntensity: 1.6,
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
   });
@@ -640,7 +662,7 @@ function buildGLBCan(flavor, source, anisotropy) {
     const base = o.material;
     const map = base && base.map ? base.map : null;
     if (map) {
-      map.anisotropy = Math.min(16, anisotropy);
+      map.anisotropy = Math.min(8, anisotropy);
       map.colorSpace = THREE.SRGBColorSpace;
     }
     const isLabel = map && map.image && map.image.width >= 500;
@@ -655,7 +677,7 @@ function buildGLBCan(flavor, source, anisotropy) {
         map,
         color: base && base.color ? base.color : new THREE.Color(0xffffff),
         metalness: 0.9, roughness: 0.32, envMapIntensity: 1.35,
-        roughnessMap: drops.rough, bumpMap: drops.bump, bumpScale: 0.35,
+        roughnessMap: drops.map, bumpMap: drops.map, bumpScale: 0.35,
       });
     }
   }
@@ -711,16 +733,18 @@ function buildFallbackCan(flavor, anisotropy) {
 const FOV = 22; /* quasi-orthographique : colle à la perspective studio */
 const viewers = [];
 
-function createViewer(container) {
+function createViewer(container, opts) {
+  const o = opts || {};
   const flavor = container.dataset.flavor;
   const stage = container.querySelector(".can3d-stage");
-  if (!flavor || !stage) return;
+  if (!flavor || !stage) return false;
 
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
   } catch (e) {
-    return;
+    console.warn("WebGL indisponible pour la canette", flavor);
+    return false;
   }
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -742,15 +766,15 @@ function createViewer(container) {
   rim.position.set(-1.5, 2.5, -4.5);
   scene.add(rim);
 
-  /* modèle : fallback immédiat, remplacé par le modèle photo */
+  /* modèle : chargé en différé (le .webp de la page sert d'attente) ;
+     plus de canette procédurale construite pour rien au démarrage */
   const aniso = renderer.capabilities.getMaxAnisotropy();
-  const can = buildFallbackCan(flavor, aniso);
-  scene.add(can);
 
   const v = {
-    stage, renderer, scene, camera, can,
-    minY: FB_MIN, maxY: FB_MAX, H: FB_MAX - FB_MIN,
-    visible: true,
+    stage, renderer, scene, camera, can: null,
+    minY: -2.5, maxY: 2.5, H: 5,
+    visible: true, ready: false,
+    basePR: Math.min(window.devicePixelRatio || 1, 2), /* >2 : coût GPU x2 pour rien */
     state: {
       ry: Math.PI, rx: 0, vel: 0,
       auto: REDUCED ? 0 : 0.5, autoT: REDUCED ? 0 : 0.5,
@@ -759,7 +783,6 @@ function createViewer(container) {
       bobPhase: Math.random() * 7,
     },
   };
-  can.position.y = -(v.minY + v.maxY) / 2;
 
   const fitCamera = () => {
     const dist = (v.H / 2 + 0.3) / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
@@ -768,20 +791,40 @@ function createViewer(container) {
   };
   fitCamera();
 
+  const reveal = () => {
+    v.ready = true;
+    /* fondu enchaine : la 3D apparait par-dessus le .webp (pose neutre
+       alignee), puis l'image s'efface une fois la 3D en place */
+    container.classList.add("gl-on");
+    setTimeout(() => container.classList.add("swap-done"), 550);
+    resize();
+  };
+
   if (PAINT[flavor]) {
-    loadGLBCan(flavor)
+    /* hero : tout de suite ; sections : après l'étalonnage du démarrage
+       (le .webp de la page fait un aperçu parfait entre-temps) */
+    const fetchGLB = () => {
+      loadGLBCan(flavor)
       .then((source) => {
         const glb = buildGLBCan(flavor, source, aniso);
-        glb.rotation.copy(can.rotation);
-        scene.remove(can);
-        scene.add(glb);
         v.can = glb;
-        v.minY = -2.5;
-        v.maxY = 2.5;
-        v.H = 5;
-        fitCamera(); /* cadre le modèle réel */
+        scene.add(glb);
+        reveal();
       })
-      .catch(() => {}); /* .glb absent : la canette de secours reste */
+      .catch(() => {
+        /* .glb absent/corrompu : canette procédurale de secours */
+        const fb = buildFallbackCan(flavor, aniso);
+        v.can = fb;
+        v.minY = FB_MIN;
+        v.maxY = FB_MAX;
+        v.H = FB_MAX - FB_MIN;
+        scene.add(fb);
+        fitCamera();
+        reveal();
+      });
+    };
+    if (o.deferGLB) setTimeout(fetchGLB, o.delay || 0);
+    else fetchGLB();
   }
 
   /* --- interactions --- */
@@ -832,11 +875,12 @@ function createViewer(container) {
   const resize = () => {
     const w = stage.clientWidth || 1;
     const h = stage.clientHeight || 1;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
+    renderer.setPixelRatio(v.basePR * prScale);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
+  v.resize = resize;
   resize();
   new ResizeObserver(resize).observe(stage);
 
@@ -845,17 +889,52 @@ function createViewer(container) {
     { rootMargin: "80px", threshold: 0.02 }
   ).observe(stage);
 
-  container.classList.add("gl-on");
+  return true;
 }
 
 /* =========================================================
    6. INIT + boucle de rendu partagée
+   - viewers étalés : le hero tout de suite, les autres un à
+     un (130 ms d'écart, GLB repoussés d'autant) pour que le
+     premier rendu ne soit jamais bloqué ;
+   - rendu suspendu pour toute canette hors écran ;
+   - résolution adaptative : si les FPS chutent, le pixel
+     ratio baisse par paliers (puis remonte si ça respire).
    ========================================================= */
+let prScale = 1; /* multiplicateur global de résolution (0.55 → 1) */
+
 function init() {
-  document.querySelectorAll(".can3d[data-flavor]").forEach((c) => {
-    try { createViewer(c); } catch (err) { /* fallback image */ }
-  });
+  const containers = [...document.querySelectorAll(".can3d[data-flavor]")];
+  const hero = document.querySelector(".hero .can3d[data-flavor]");
+
+  /* viewer du hero : immédiat (visible d'entrée de jeu) */
+  if (hero) { try { createViewer(hero); } catch (err) { console.warn("3D indisponible (hero):", err); } }
+
+  /* autres viewers : créés au chargement mais ÉTALÉS (un toutes les
+     130 ms) pour ne jamais bloquer le premier rendu, et leur .glb est
+     repoussé d'autant — zéro à-coup, tout est prêt en ~2 s. */
+  let k = 0;
+  for (const c of containers) {
+    if (c === hero) continue;
+    k++;
+    const rank = k; /* figé pour ce viewer (sinon lu trop tard par le timer) */
+    setTimeout(() => {
+      try { createViewer(c, { deferGLB: true, delay: rank * 220 }); }
+      catch (err) { console.warn("3D indisponible:", err); }
+    }, 130 * rank);
+  }
+
   if (!viewers.length) return;
+
+  const applyPR = () => {
+    for (const v of viewers) {
+      v.renderer.setPixelRatio(v.basePR * prScale);
+      if (v.resize) v.resize();
+    }
+  };
+
+  /* résolution adaptative : EMA des FPS, paliers après période de chauffe */
+  let fpsEMA = 60, adaptT = 0, warm = 2.5;
 
   const t0 = performance.now();
   let last = t0;
@@ -864,8 +943,25 @@ function init() {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const t = (now - t0) / 1000;
+
+    fpsEMA += (1 / Math.max(dt, 1e-4) - fpsEMA) * 0.05;
+    adaptT += dt;
+    if (adaptT >= 2) {
+      adaptT = 0;
+      if (warm > 0) warm -= 2; /* laisse finir le chargement initial */
+      else if (viewers.some((v) => v.visible && v.ready)) {
+        if (fpsEMA < 42 && prScale > 0.55) {
+          prScale = Math.max(0.55, prScale - 0.15);
+          applyPR();
+        } else if (fpsEMA > 57 && prScale < 1) {
+          prScale = Math.min(1, prScale + 0.1);
+          applyPR();
+        }
+      }
+    }
+
     for (const v of viewers) {
-      if (!v.visible) continue;
+      if (!v.visible || !v.ready) continue;
       const st = v.state;
       if (!st.drag) {
         st.vel *= 0.955;

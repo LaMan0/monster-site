@@ -35,11 +35,14 @@ img{user-select:none;-webkit-user-drag:none}
 #bg-assault{background:radial-gradient(1100px 800px at 50% 8%,#191a06 0%,#111004 42%,#070603 100%)}
 #bg-pacific{background:radial-gradient(1100px 800px at 50% 8%,#1d0a2b 0%,#120718 42%,#07040b 100%)}
 
-/* grain */
-.grain{position:fixed;inset:-50%;width:200%;height:200%;z-index:60;pointer-events:none;opacity:.05;
+/* grain (couche réduite au minimum : translate max 4% < marge 15%) */
+.grain{position:fixed;inset:-15%;width:130%;height:130%;z-index:60;pointer-events:none;opacity:.05;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
   animation:grain 8s steps(10) infinite}
 @keyframes grain{0%,100%{transform:translate(0,0)}20%{transform:translate(-2%,3%)}40%{transform:translate(2%,-3%)}60%{transform:translate(-3%,-2%)}80%{transform:translate(3%,2%)}}
+
+/* sections de fin de page : rendu paresseux (peint seulement à l'approche) */
+.blend,.compare,.faq,.join,footer{content-visibility:auto;contain-intrinsic-size:auto 900px}
 
 /* ---------- barre de progression ---------- */
 .progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:100;
@@ -60,7 +63,7 @@ img{user-select:none;-webkit-user-drag:none}
 /* ---------- header ---------- */
 header{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
   padding:18px 4vw;transition:background .4s,padding .4s,backdrop-filter .4s}
-header.scrolled{background:rgba(5,5,5,.75);backdrop-filter:blur(14px);padding:10px 4vw;border-bottom:1px solid rgba(61,255,28,.15)}
+header.scrolled{background:rgba(5,5,5,.85);backdrop-filter:blur(8px);padding:10px 4vw;border-bottom:1px solid rgba(61,255,28,.15)}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--paper)}
 .logo svg{width:30px;height:auto;filter:drop-shadow(0 0 8px var(--a1))}
 .logo span{font-family:var(--font-display);font-size:1.35rem;letter-spacing:.14em;color:#fff}
@@ -116,19 +119,24 @@ nav a:hover::after{width:100%}
   filter:drop-shadow(0 26px 42px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(61,255,28,.18))}
 @keyframes canFloat{0%,100%{transform:translateY(0) rotate(-1.2deg)}50%{transform:translateY(-16px) rotate(1.4deg)}}
 
-/* ---------- scenes WebGL 3D ---------- */
-.can3d-stage{position:relative;width:100%;aspect-ratio:10/23;cursor:grab;touch-action:pan-y;
-  user-select:none;-webkit-user-select:none}
+/* ---------- scenes WebGL 3D ----------
+   La scene se superpose EXACTEMENT au .webp (qui garde la boite en
+   page) : au chargement la 3D fond en fondu PAR-DESSUS l'image, puis
+   l'image s'efface (classe .swap-done posee apres le premier rendu).
+   Plus aucun flash image -> 3D. */
+.can3d-stage{position:absolute;inset:0;cursor:grab;touch-action:pan-y;
+  user-select:none;-webkit-user-select:none;opacity:0}
 .can3d:not(.gl-on) .can3d-stage{display:none}
-.can3d.gl-on .can3d-stage{display:block;animation:canStageIn .9s cubic-bezier(.2,.7,.2,1) both}
-@keyframes canStageIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:none}}
-.can3d.gl-on .can-img-fb{display:none}
+.can3d.gl-on .can3d-stage{display:block;opacity:1;transition:opacity .45s ease}
+.can3d.gl-on .can-img-fb{animation:none} /* pose neutre : alignee avec la 3D */
+.can3d.gl-on.swap-done .can-img-fb{opacity:0;visibility:hidden;
+  transition:opacity .35s ease, visibility 0s linear .35s}
 .can3d-stage:active{cursor:grabbing}
 .can3d-stage canvas{position:absolute;inset:0;display:block;width:100%!important;height:100%!important}
 
-/* ombre portee sous la canette */
+/* ombre portee sous la canette (pur gradient : pas de filter, coût nul) */
 .can-shadow{position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);width:76%;height:30px;
-  background:radial-gradient(ellipse at center,rgba(0,0,0,.65) 0%,transparent 70%);filter:blur(7px);pointer-events:none}
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.6) 0%,rgba(0,0,0,.25) 45%,transparent 72%);pointer-events:none}
 
 /* indice d'interaction sous la canette du hero */
 .can-hint{position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);white-space:nowrap;
