@@ -29,11 +29,136 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const gltfLoader = new GLTFLoader();
 const glbCache = new Map();
 
-/* Orientation : dans le UV du modèle Blender, la griffe (logo) est
-   au centre de l'étiquette (u≈0.5). Ce capot la fait tourner pour
-   qu'elle regarde la caméra au chargement (le viewer démarre à
-   ry = PI, comme les anciennes canettes). */
-const GLB_FACE_FRONT = -2.479; /* rad — recalculable depuis les UV */
+/* =========================================================
+   Orientation du logo (claw) face caméra au chargement.
+   Ni la couture UV ni la position du claw ne sont constantes
+   dans les exports Blender (ex. Mango Loco : claw à u≈0.25
+   car la texture contient face + dos + couvercles ; original :
+   u≈0.5). On mesure donc, pour CHAQUE modèle :
+     1. la colonne du claw dans la texture étiquette (critère
+        couleur par parfum, copie canvas 256px) → u_claw ;
+     2. l'angle de lacet correspondant dans la géométrie
+        (table u→angle des sommets de l'étiquette).
+   → yaw du pivot. Secours en cascade : u=0.5 puis constante.
+   ========================================================= */
+const GLB_FACE_FRONT = -2.489; /* secours absolu (valeur « original ») */
+
+/* secours si l'analyse de texture échoue : colonne du claw mesurée
+   dans chaque étiquette (cf. tools/measure_claw_yaw.mjs) */
+const CLAW_U_FALLBACK = {
+  original: 0.499, ultra: 0.504, mango: 0.247,
+  pipeline: 0.494, assault: 0.499, pacific: 0.489,
+};
+
+/* critère « pixel appartient au claw » : la couleur pleine du
+   logo, par parfum (les autres décors ne partagent pas ces teintes) */
+const CLAW_IS = {
+  original: (r, g, b) => g > 140 && g > r + 30 && g > b + 40,
+  ultra: (r, g, b) => r > 55 && r < 115 && Math.abs(r - g) < 14 && Math.abs(g - b) < 16,
+  mango: (r, g, b) => r > 205 && g > 125 && b < 95,
+  pipeline: (r, g, b) => r >= 238 && g >= 110 && g <= 195 && b >= 120 && b <= 210,
+  pacific: (r, g, b) => r > 185 && g < 75 && b < 75,
+  assault: (r, g, b) => r > 185 && g < 75 && b < 75,
+};
+
+/* colonne du claw dans la texture d'étiquette (u ∈ [0,1]), ou null :
+   histogramme des pixels-claw par colonne (bande verticale centrale),
+   pic principal, puis centroïde dans une fenêtre ±12% autour du pic. */
+function clawUFromTexture(img, flavor) {
+  const test = CLAW_IS[flavor];
+  if (!test || !img || !img.width) return null;
+  try {
+    const W = 256, H = 128;
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const cx = cv.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, W, H);
+    const d = cx.getImageData(0, 0, W, H).data;
+    const hist = new Float64Array(W);
+    const y0 = (H * 0.25) | 0, y1 = (H * 0.72) | 0;
+    for (let y = y0; y < y1; y++)
+      for (let x = 0; x < W; x++) {
+        const o = (y * W + x) * 4;
+        if (test(d[o], d[o + 1], d[o + 2])) hist[x]++;
+      }
+    let peak = 0;
+    for (let x = 1; x < W; x++) if (hist[x] > hist[peak]) peak = x;
+    if (hist[peak] < 4) return null; /* rien de convaincant */
+    const win = (W * 0.12) | 0;
+    let sw = 0, sx = 0;
+    for (let x = Math.max(0, peak - win); x < Math.min(W, peak + win); x++) {
+      sw += hist[x];
+      sx += x * hist[x];
+    }
+    return sw ? sx / sw / W : null;
+  } catch (e) {
+    return null; /* image indisponible : fallback */
+  }
+}
+
+/* mesh étiquette = plus grand mesh portant une grande texture (le corps
+   de canette ; les textures haut/bas font ~240px, l'étiquette ≥1024) */
+function findLabelMesh(model) {
+  let label = null;
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const geo = o.geometry;
+    if (!geo.attributes.position || !geo.attributes.uv) return;
+    const map = o.material && o.material.map;
+    if (!map || !map.image || map.image.width < 500) return;
+    if (!label || geo.attributes.position.count > label.geometry.attributes.position.count) label = o;
+  });
+  return label;
+}
+
+/* yaw du pivot pour que le point d'u=uTarget de l'étiquette regarde la
+   caméra (+Z) au démarrage (le viewer tourne à ry = PI) : interpole
+   circulairement la table u→angle des sommets, en coordonnées monde.
+   Renvoie null si le mesh n'est pas exploitable. */
+function yawFromLabel(mesh, uTarget) {
+  if (!mesh || !isFinite(uTarget)) return null;
+  mesh.updateWorldMatrix(true, false);
+  const pos = mesh.geometry.attributes.position;
+  const uv = mesh.geometry.attributes.uv;
+  const p = new THREE.Vector3();
+  const cols = new Map();
+  for (let i = 0; i < uv.count; i++) {
+    const u = Math.round(uv.getX(i) * 1000) / 1000;
+    p.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+    const th = Math.atan2(p.z, p.x);
+    let e = cols.get(u);
+    if (!e) cols.set(u, (e = { ca: 0, sa: 0 }));
+    e.ca += Math.cos(th);
+    e.sa += Math.sin(th);
+  }
+  const rows = [...cols.entries()]
+    .map(([u, e]) => [u, Math.atan2(e.sa, e.ca)])
+    .sort((a, b) => a[0] - b[0]);
+  if (rows.length < 2) return null;
+  const lerpAngle = (t0, t1, f) => {
+    let d = t1 - t0;
+    if (d > Math.PI) d -= 2 * Math.PI;
+    if (d < -Math.PI) d += 2 * Math.PI;
+    return t0 + d * f;
+  };
+  let theta = null;
+  for (let i = 0; i < rows.length - 1; i++) {
+    const [u0, t0] = rows[i], [u1, t1] = rows[i + 1];
+    if (u0 <= uTarget && uTarget <= u1) {
+      theta = lerpAngle(t0, t1, (uTarget - u0) / (u1 - u0));
+      break;
+    }
+  }
+  if (theta == null) { /* wrap : de la dernière colonne vers la première (+1 tour) */
+    const [u0, t0] = rows[rows.length - 1];
+    const [u1, t1] = [rows[0][0] + 1, rows[0][1]];
+    if (u0 <= uTarget && uTarget <= u1) theta = lerpAngle(t0, t1, (uTarget - u0) / (u1 - u0));
+  }
+  if (theta == null) return null;
+  /* phi = theta - PI/2 amène le claw face +Z ; le viewer démarre à PI */
+  return theta - 3 * Math.PI / 2;
+}
 
 /* charge une fois par parfum, clone ensuite pour chaque viewer */
 function loadGLBCan(flavor) {
@@ -691,8 +816,17 @@ function buildGLBCan(flavor, source, anisotropy) {
   box.setFromObject(model);
   model.position.sub(box.getCenter(new THREE.Vector3()));
 
-  /* la griffe fait face à la caméra au démarrage */
-  pivot.rotation.y = GLB_FACE_FRONT;
+  /* la griffe (claw) fait face à la caméra au démarrage : la colonne du
+     claw est mesurée dans la texture d'étiquette, son angle lu dans la
+     géométrie (la couture UV varie selon l'export Blender) */
+  const labelMesh = findLabelMesh(model);
+  let yaw = null;
+  if (labelMesh) {
+    const uClaw = clawUFromTexture(labelMesh.material.map.image, flavor)
+      ?? CLAW_U_FALLBACK[flavor] ?? 0.5;
+    yaw = yawFromLabel(labelMesh, uClaw);
+  }
+  pivot.rotation.y = yaw ?? GLB_FACE_FRONT;
   pivot.add(model);
   can.add(pivot);
   return can;
@@ -925,6 +1059,9 @@ function init() {
   }
 
   if (!viewers.length) return;
+
+  /* hook de debug (console / tests) : window.__cansViewers */
+  window.__cansViewers = viewers;
 
   const applyPR = () => {
     for (const v of viewers) {
